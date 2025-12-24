@@ -10,7 +10,7 @@ import { exec } from "child_process";
 const execPromise = util.promisify(exec);
 const app = express();
 
-// Parse JSON + URL-encoded bodies (needed for password)
+// Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -23,7 +23,7 @@ app.use((req, res, next) => {
 });
 app.options("*", (req, res) => res.sendStatus(200));
 
-// Use /var/tmp (Render has more space than /tmp)
+// Use /var/tmp (Render has more space)
 const upload = multer({ dest: "/var/tmp" });
 
 app.post(
@@ -32,18 +32,15 @@ app.post(
     { name: "cert", maxCount: 1 },
     { name: "profile", maxCount: 1 },
     { name: "ipa", maxCount: 1 },
-    { name: "password", maxCount: 1 } // allow password in multipart
+    { name: "password", maxCount: 1 }
   ]),
   async (req, res) => {
     try {
       console.log("📥 Received /sign request");
 
-      // Files
       const certP12 = req.files.cert?.[0]?.path;
       const profile = req.files.profile?.[0]?.path;
       const ipa = req.files.ipa?.[0]?.path;
-
-      // Password (multer puts text fields in req.body)
       const password = req.body.password;
 
       if (!certP12 || !profile || !ipa || !password) {
@@ -67,10 +64,10 @@ app.post(
         `openssl pkcs12 -in ${certP12} -out ${keyPem} -nocerts -nodes -passin pass:${password}`
       );
 
-      console.log("✍️ Signing IPA with isign...");
+      console.log("✍️ Signing IPA with zsign...");
 
       await execPromise(
-        `isign --certificate ${certPem} --key ${keyPem} --provisioning-profile ${profile} --output ${outputIPA} ${ipa}`
+        `zsign -k ${keyPem} -c ${certPem} -p ${profile} -o ${outputIPA} ${ipa}`
       );
 
       console.log("📤 Uploading signed IPA to Litterbox...");

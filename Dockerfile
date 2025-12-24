@@ -1,17 +1,15 @@
 FROM node:18-slim
 
-# Install Python + pip + dependencies for isign
+# Install dependencies needed by zsign + openssl
 RUN apt-get update && apt-get install -y \
-    python3 python3-pip \
-    python3-setuptools python3-wheel python3-dev \
-    libssl-dev \
-    libplist-dev \
-    libxml2-dev \
-    unzip git \
-    && pip3 install --break-system-packages git+https://github.com/apperian/isign.git@python3 \
+    openssl libssl-dev libzip4 libbz2-1.0 liblzma5 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Copy prebuilt zsign binary
+COPY bin/zsign /usr/local/bin/zsign
+RUN chmod +x /usr/local/bin/zsign
 
 COPY package.json .
 RUN npm install --production
