@@ -10,7 +10,7 @@ import { exec } from "child_process";
 const execPromise = util.promisify(exec);
 const app = express();
 
-// Body parsing (needed for password)
+// Parse JSON + URL-encoded bodies (needed for password)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -23,7 +23,7 @@ app.use((req, res, next) => {
 });
 app.options("*", (req, res) => res.sendStatus(200));
 
-// Use /var/tmp (Render has more space here)
+// Use /var/tmp (Render has more space than /tmp)
 const upload = multer({ dest: "/var/tmp" });
 
 app.post(
@@ -31,16 +31,25 @@ app.post(
   upload.fields([
     { name: "cert", maxCount: 1 },
     { name: "profile", maxCount: 1 },
-    { name: "ipa", maxCount: 1 }
+    { name: "ipa", maxCount: 1 },
+    { name: "password", maxCount: 1 } // allow password in multipart
   ]),
   async (req, res) => {
     try {
       console.log("📥 Received /sign request");
 
-      const certP12 = req.files.cert[0].path;
-      const profile = req.files.profile[0].path;
-      const ipa = req.files.ipa[0].path;
+      // Files
+      const certP12 = req.files.cert?.[0]?.path;
+      const profile = req.files.profile?.[0]?.path;
+      const ipa = req.files.ipa?.[0]?.path;
+
+      // Password (multer puts text fields in req.body)
       const password = req.body.password;
+
+      if (!certP12 || !profile || !ipa || !password) {
+        console.log("❌ Missing required fields");
+        return res.status(400).json({ error: "Missing files or password" });
+      }
 
       console.log("🔐 Extracting PEM files...");
 
