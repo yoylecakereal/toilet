@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     libplist-dev \
     libxml2-dev \
     unzip \
-    && pip3 install isign \
+    && pip3 install --break-system-packages isign \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
