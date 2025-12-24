@@ -1,9 +1,11 @@
 import express from "express";
 import multer from "multer";
 import axios from "axios";
-import { exec } from "child_process";
 import fs from "fs";
+import util from "util";
+import { exec } from "child_process";
 
+const execPromise = util.promisify(exec);
 const app = express();
 const upload = multer({ dest: "/tmp" });
 
@@ -16,43 +18,43 @@ app.post(
   ]),
   async (req, res) => {
     try {
-      const cert = req.files.cert[0].path;
+      const certP12 = req.files.cert[0].path;
       const profile = req.files.profile[0].path;
       const ipa = req.files.ipa[0].path;
       const password = req.body.password;
 
+      const certPem = "/tmp/cert.pem";
+      const keyPem = "/tmp/key.pem";
       const outputIPA = "/tmp/signed.ipa";
 
-      // ---- SIGNING COMMAND (placeholder) ----
-      // Replace this with actual zsign command
-      const cmd = `zsign -k ${cert} -p ${password} -m ${profile} -o ${outputIPA} ${ipa}`;
+      // Extract PEM cert
+      await execPromise(
+        `openssl pkcs12 -in ${certP12} -out ${certPem} -clcerts -nokeys -passin pass:${password}`
+      );
 
-      await new Promise((resolve, reject) => {
-        exec(cmd, (err, stdout, stderr) => {
-          if (err) reject(stderr);
-          else resolve(stdout);
-        });
-      });
+      // Extract PEM key
+      await execPromise(
+        `openssl pkcs12 -in ${certP12} -out ${keyPem} -nocerts -nodes -passin pass:${password}`
+      );
 
-      // ---- UPLOAD SIGNED IPA TO LITTERBOX ----
-      const ipaData = fs.createReadStream(outputIPA);
+      // Sign with isign
+      await execPromise(
+        `isign --certificate ${certPem} --key ${keyPem} --provisioning-profile ${profile} --output ${outputIPA} ${ipa}`
+      );
+
+      // Upload signed IPA to Litterbox
       const ipaUpload = await axios.post(
         "https://litterbox.catbox.moe/resources/internals/api.php",
-        ipaData,
+        fs.createReadStream(outputIPA),
         {
-          headers: {
-            "Content-Type": "application/octet-stream"
-          },
-          params: {
-            reqtype: "fileupload",
-            time: "1h"
-          }
+          headers: { "Content-Type": "application/octet-stream" },
+          params: { reqtype: "fileupload", time: "1h" }
         }
       );
 
       const ipaURL = ipaUpload.data;
 
-      // ---- CREATE MANIFEST ----
+      // Create manifest
       const manifest = `
       <?xml version="1.0" encoding="UTF-8"?>
       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -83,19 +85,13 @@ app.post(
 
       fs.writeFileSync("/tmp/manifest.plist", manifest);
 
-      // ---- UPLOAD MANIFEST ----
-      const manifestData = fs.createReadStream("/tmp/manifest.plist");
+      // Upload manifest
       const manifestUpload = await axios.post(
         "https://litterbox.catbox.moe/resources/internals/api.php",
-        manifestData,
+        fs.createReadStream("/tmp/manifest.plist"),
         {
-          headers: {
-            "Content-Type": "application/octet-stream"
-          },
-          params: {
-            reqtype: "fileupload",
-            time: "1h"
-          }
+          headers: { "Content-Type": "application/octet-stream" },
+          params: { reqtype: "fileupload", time: "1h" }
         }
       );
 
