@@ -9,6 +9,16 @@ const execPromise = util.promisify(exec);
 const app = express();
 const upload = multer({ dest: "/tmp" });
 
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*"); // or your domain instead of *
+  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
+app.options("*", (req, res) => {
+  res.sendStatus(200);
+});
+
 app.post(
   "/sign",
   upload.fields([
@@ -108,3 +118,4 @@ app.post(
 );
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
